@@ -1,0 +1,153 @@
+---
+title: "Creating Analysis file"
+author: "Katalin Roth & Peter Lugtig"
+date: "3 April 2019"
+output:
+  pdf_document: 
+    highlight: zenburn
+---
+
+```{r}
+# Loading packages
+library(haven)
+library(dplyr)
+library(data.table)
+
+# Loading the original dataset
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Aggregated Dataset")
+aggdata <- read_sav("AVA-EVA Analysis data set - complete.sav") # this is the raw data file
+
+# # FOR CLUSTERING
+# setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+# aggdata <- readRDS("aggdatcluster.RDS")
+
+# Stage 1 -> already in the data
+setnames(aggdata, "AVAregist", "Stage1")
+
+# Stage 4 -> select correct rewarded groups
+aggdata <- aggdata %>%
+  mutate(Stage4 = ifelse(AVAeind < 4, TRUE, FALSE))
+aggdata$Stage4[is.na(aggdata$Stage4)] <- FALSE
+
+# Stage 2 -> select ppl with more than 1 day of data
+aggdata <- aggdata %>%
+  mutate(Stage2 = ifelse(days > 1, TRUE, FALSE))
+aggdata$Stage2[is.na(aggdata$Stage2)] <- FALSE
+
+aggdata %>%
+  select(Stage1, Stage2, Stage4, SE_Groep) %>%
+  group_by(SE_Groep) %>%
+  summarise(n1 = sum(Stage1), n2 = sum(Stage2), n4 = sum(Stage4))
+
+# Stage indicating variable
+aggdata$WhichStage <- 0
+aggdata$WhichStage[aggdata$Stage1 == TRUE] <- 1
+aggdata$WhichStage[aggdata$Stage2 == TRUE] <- 2
+aggdata$WhichStage[aggdata$Stage4 == TRUE] <- 4
+
+aggdata$WhichStage <- as.factor(aggdata$WhichStage)
+
+
+# Changing variable names
+setnames(aggdata, "SE_Cluster", "Cluster")
+setnames(aggdata, "SE_Groep", "Incentive")
+setnames(aggdata, "LFT", "Age_in_yrs")
+setnames(aggdata, "VRLGBAGESLACHT", "Gender")
+setnames(aggdata, "BURKLASSE4", "Marital_status")
+setnames(aggdata, "AANTAUTOP", "Numberof_cars")
+setnames(aggdata, "AANTBROMP", "Numberof_mopeds")
+setnames(aggdata, "AUTOP", "Has_car")
+setnames(aggdata, "BROMMEROP", "Has_moped")
+setnames(aggdata, "RIJBEWIJSP", "Driverslicense")
+setnames(aggdata, "STEDBUURT", "Urbanity")
+setnames(aggdata, "OPLNIVHB", "Education")
+setnames(aggdata, "ETNGROEPKORT1", "Origin")
+setnames(aggdata, "VRLGBAGENERATIE", "Generation")
+setnames(aggdata, "TYPEEIGENAAR", "HomeOwner")
+setnames(aggdata, "INHP100HGEST", "Income")
+setnames(aggdata, "INHP100HBEST", "Income2")
+
+# Changing variable types and categories
+aggdata$Cluster <- as.factor(aggdata$Cluster)
+aggdata$Incentive <- as.factor(aggdata$Incentive)
+
+# Making age categorical
+aggdata$AgeCat <- 0
+aggdata$AgeCat[aggdata$Age_in_yrs <= 15] <- 1
+aggdata$AgeCat[aggdata$Age_in_yrs > 15 & aggdata$Age_in_yrs <= 25] <- 2
+aggdata$AgeCat[aggdata$Age_in_yrs > 25 & aggdata$Age_in_yrs <= 45] <- 3
+aggdata$AgeCat[aggdata$Age_in_yrs > 45 & aggdata$Age_in_yrs <= 65] <- 4
+aggdata$AgeCat[aggdata$Age_in_yrs > 65] <- 5
+aggdata$AgeCat[aggdata$AgeCat == 1] <- 2
+
+aggdata$AgeCat <- factor(aggdata$AgeCat, levels = c(2, 3, 4, 5), labels = c("16-25", "26-45", "46-65", ">65"))
+
+# Home Owner, less categories
+aggdata$HomeOwner[aggdata$HomeOwner == 3] <- 2
+aggdata$HomeOwner[is.na(aggdata$HomeOwner)] <- "Unknown"
+
+# Marital status, less categories
+aggdata$Marital_status[aggdata$Marital_status == 3] <- 2
+aggdata$Marital_status[aggdata$Marital_status == 4] <- 2
+aggdata$Marital_status <- factor(aggdata$Marital_status, levels = c(1, 2), labels = c("Married", "Single"))
+
+# Income, quantiles
+aggdata$IncomeQ <- 0
+aggdata$IncomeQ[aggdata$Income == -1] <- "Unknown"
+aggdata$IncomeQ[aggdata$Income == -2] <- "Unknown"
+aggdata$IncomeQ[aggdata$Income < 21] <- 1
+aggdata$IncomeQ[aggdata$Income > 20 & aggdata$Income < 41] <- 2
+aggdata$IncomeQ[aggdata$Income > 40 & aggdata$Income < 61] <- 3
+aggdata$IncomeQ[aggdata$Income > 60 & aggdata$Income < 81] <- 4
+aggdata$IncomeQ[aggdata$Income > 80] <- 5
+
+aggdata$IncomeQ <- factor(aggdata$IncomeQ, levels = c(1, 2, 3, 4, 5, 9), labels = c("0-20", "21-40", "41-60", "61-80", "81-100", "Unknown"))
+aggdata$IncomeQ[is.na(aggdata$IncomeQ)] <- "Unknown"
+
+
+# remove the ones that have missings in sample aggdata file
+aggdata %>%
+  filter(is.na(Generation)) %>%
+  select(username)
+
+aggdata <- aggdata %>%
+  filter(username != 4381 & username != 6685 & username != 1639 & username != 8584 & username != 2421 & username != 8619)
+
+# Fix the factor labels
+aggdata$Gender <- factor(aggdata$Gender, levels = c(1, 2), labels = c("Male", "Female"))
+aggdata$Marital_status <- as.factor(aggdata$Marital_status)
+aggdata$Has_car <- factor(aggdata$Has_car, levels = c(0, 1), labels = c("No", "Yes"))
+aggdata$Has_moped <- factor(aggdata$Has_moped, levels = c(0, 1), labels = c("No", "Yes"))
+aggdata$Driverslicense <- factor(aggdata$Driverslicense, levels = c(0, 1), labels = c("No", "Yes"))
+aggdata$Education <- factor(aggdata$Education, levels = c(11, 12, 21, 31, 32, 99), labels = c("Basisonderwijs", "Vmbo, avo onderbouw, mbo 1", "Havo, vwo, mbo", "Hbo-, wo-bachelor", "Hbo-, wo-master, doctor", "Unknown"))
+aggdata$Education[is.na(aggdata$Education)] <- "Unknown"
+aggdata$Urbanity <- factor(aggdata$Urbanity, levels = c(1, 2, 3, 4, 5), labels = c("Very strong", "Strong", "Moderate", "Little", "Not"))
+aggdata$Origin <- factor(aggdata$Origin, levels = c(1, 3, 4), labels = c("Dutch", "Not-western", "Western"))
+aggdata$Generation <- factor(aggdata$Generation, levels = c(0, 1, 2), labels = c("Dutch", "First", "Second"))
+aggdata$HomeOwner <- factor(aggdata$HomeOwner, levels = c(1, 2, 9), labels = c("Owner", "Rent", "Unknown"))
+aggdata$Cluster <- factor(aggdata$Cluster, levels = c(0, 1), labels = c("New", "ODiN"))
+aggdata$Incentive <- factor(aggdata$Incentive, levels = c(1, 2, 3), labels = c("5-5-5", "5-10", "5-20"))
+aggdata$HomeOwner[is.na(aggdata$HomeOwner)] <- "Unknown"
+
+
+# Fixing device type
+aggdata$type <- "Other"
+aggdata$type[aggdata$manufacturer == "Apple"] <- "Apple"
+aggdata$type[aggdata$manufacturer == "samsung"] <- "samsung"
+aggdata$type <- as.factor(aggdata$type)
+
+# # FOR CLUSTERING
+# setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+# saveRDS(aggdata, "clustdata.rds")
+
+
+
+# Select used variables
+aggdata <- select(aggdata, username, Cluster, Incentive, Stage1, Stage2, Stage4, Age_in_yrs, AgeCat, Gender, Marital_status, Education, Has_car, Has_moped, Driverslicense, Urbanity, Origin, Generation, HomeOwner, Income, Income2, IncomeQ, type)
+
+summary(aggdata)
+
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+saveRDS(aggdata, "info2.rds")
+```
+

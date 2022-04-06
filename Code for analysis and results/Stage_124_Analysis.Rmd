@@ -1,0 +1,215 @@
+---
+title: "Stage 1, 2, 3 Analysis"
+author: "Katalin Roth & Peter Lugtig"
+date: "3 May 2019"
+output:
+  pdf_document: 
+    highlight: zenburn
+---
+
+Loading necessary packages & data files
+
+```{r, message=FALSE}
+# Loading packages
+library(pander)
+library(dplyr)
+library(margins)
+
+
+# ----------------
+
+# Loading dataset with registry variables
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+info2 <- readRDS(file = "info2.rds")
+
+# Removing unnecessary Income columns
+info2 <- info2 %>%
+  select(-Income) %>%
+  select(-Income2)
+```
+
+
+# Stage 1
+
+```{r, eval=FALSE}
+# Model with all the variables
+stage1lm <- glm(Stage1 ~ Cluster + Incentive + AgeCat + Gender + Driverslicense +
+                  Education + Marital_status + Origin + Urbanity  + HomeOwner + 
+                  IncomeQ, data = info2, family="binomial")
+summary(stage1lm)
+
+# Backwards selection
+backwards <- step(stage1lm)
+formula(backwards)
+summary(backwards)
+
+# Model with significant variables only
+stage1lm2 <- glm(Stage1 ~ Cluster + Incentive + AgeCat + Education +
+              Marital_status + Origin + IncomeQ, data = info2, family="binomial")
+summary(stage1lm2)
+
+# Calculating the average marginal effects
+ame <- margins(stage1lm2)
+ame
+
+# Calculating the odds from the coefficients
+odds <- as.data.frame(exp(stage1lm2$coefficients))
+pander(odds)
+
+# Saving the regression output
+tablestage1 <- as.data.frame(cbind(round(summary(stage1lm2)$coefficients[,1], digits = 3), round(summary(stage1lm2)$coefficients[,2], digits = 3), round(summary(stage1lm2)$coefficients[,4], digits = 3)))
+write.table(tablestage1, file = "tableStage1.txt", sep = ",", quote = FALSE, row.names = F)
+```
+
+# Stage 2
+
+```{r, eval=FALSE}
+# Model with all the variables
+stage2lm <- glm(Stage2 ~ Cluster + Incentive + AgeCat + Gender + Driverslicense + 
+                  Education + Marital_status + Origin + Urbanity  + HomeOwner + 
+                  IncomeQ, data = info2, family="binomial")
+summary(stage2lm)
+
+# Backwards selection
+backwards2 <- step(stage2lm)
+formula(backwards2)
+summary(backwards2)
+
+# Model with significant variables only
+stage2lm2 <- glm(Stage2 ~  Cluster + Incentive + AgeCat +
+                   Education + Marital_status + Origin + IncomeQ, data = info2, family="binomial")
+summary(stage2lm2)
+
+# Calculating the average marginal effects
+ame2 <- margins(stage2lm2)
+ame2
+
+# Calculating the odds from the coefficients
+odds <- as.data.frame(exp(stage2lm2$coefficients))
+pander(odds)
+
+# Saving the regression output
+tablestage2 <- as.data.frame(cbind(round(summary(stage2lm2)$coefficients[,1], digits = 3), round(summary(stage2lm2)$coefficients[,2], digits = 3), round(summary(stage2lm2)$coefficients[,4], digits = 3)))
+write.table(tablestage2, file = "tableStage2.txt", sep = ",", quote = FALSE, row.names = F)
+```
+
+
+# Stage 4
+
+```{r, eval=FALSE}
+# Model with all the variables
+stage4lm <- glm(Stage4 ~ Cluster + Incentive + AgeCat + Gender + Driverslicense + 
+                  Education + Marital_status + Origin + Urbanity + HomeOwner + 
+                  IncomeQ, data = info2, family="binomial")
+summary(stage4lm)
+
+# Backwards selection
+backwards4 <- step(stage4lm)
+formula(backwards4)
+summary(backwards4)
+
+# Model with significant variables only
+stage4lm2 <- glm(Stage4 ~  Cluster + Incentive + AgeCat + Gender +
+                 Education + Marital_status + Origin +
+                 IncomeQ, data = info2, family="binomial")
+summary(stage4lm2)
+
+# Calculating the average marginal effects
+ame4 <- margins(stage4lm2)
+ame4
+
+
+# Calculating the odds from the coefficients
+odds <- as.data.frame(exp(stage4lm2$coefficients))
+pander(odds)
+
+# Saving the regression output
+tablestage4 <- as.data.frame(cbind(round(summary(stage4lm2)$coefficients[,1], digits = 3), round(summary(stage4lm2)$coefficients[,2], digits = 3), round(summary(stage4lm2)$coefficients[,4], digits = 3)))
+write.table(tablestage4, file = "tableStage4.txt", sep = ",", quote = FALSE, row.names = F)
+```
+
+
+# Analysis conditional on stage 1, and with device type added to the formula
+
+
+```{r, message=FALSE}
+# Loading dataset with registry variables
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+info2 <- readRDS(file = "info2.rds")
+
+# Removing unnecessary Income columns
+info2 <- info2 %>%
+  select(-Income) %>%
+  select(-Income2)
+
+# Select only participants from stage 1 and after
+info2 <- info2 %>%
+  filter(Stage1 == 1)
+```
+
+# Stage 2
+
+```{r, eval=FALSE}
+# Model with all the variables
+stage2lm <- glm(Stage2 ~ Cluster + Incentive + AgeCat + Gender + Driverslicense + 
+                  Education + Marital_status + Origin + Urbanity  + HomeOwner + 
+                  IncomeQ + type, data = info2, family="binomial")
+summary(stage2lm)
+
+# Backwards selection
+backwards2 <- step(stage2lm)
+formula(backwards2)
+summary(backwards2)
+
+# Model with significant variables only
+stage2lm2 <- glm(Stage2 ~ AgeCat + Origin + HomeOwner + type, family = "binomial", 
+    data = info2)
+summary(stage2lm2)
+
+# Calculating the average marginal effects
+ame2 <- margins(stage2lm2)
+ame2
+
+# Calculating the odds from the coefficients
+odds <- as.data.frame(exp(stage2lm2$coefficients))
+pander(odds)
+
+# Saving the regression output
+tablestage2 <- as.data.frame(cbind(round(summary(stage2lm2)$coefficients[,1], digits = 3), round(summary(stage2lm2)$coefficients[,2], digits = 3), round(summary(stage2lm2)$coefficients[,4], digits = 3)))
+write.table(tablestage2, file = "CONDtableStage2.txt", sep = ",", quote = FALSE, row.names = F)
+```
+
+
+# Stage 3
+
+```{r, eval=FALSE}
+# Model with all the variables
+stage4lm <- glm(Stage4 ~ Cluster + Incentive + AgeCat + Gender + Driverslicense + 
+                  Education + Marital_status + Origin + Urbanity + HomeOwner + 
+                  IncomeQ + type, data = info2, family="binomial")
+summary(stage4lm)
+
+# Backwards selection
+backwards4 <- step(stage4lm)
+formula(backwards4)
+summary(backwards4)
+
+# Model with significant variables only
+stage4lm2 <- glm(Stage4 ~ Incentive + AgeCat + Gender + Origin + 
+    HomeOwner + type, family = "binomial", data = info2)
+summary(stage4lm2)
+
+# Calculating the average marginal effects
+ame4 <- margins(stage4lm2)
+ame4
+
+
+# Calculating the odds from the coefficients
+odds <- as.data.frame(exp(stage4lm2$coefficients))
+pander(odds)
+
+# Saving the regression output
+tablestage4 <- as.data.frame(cbind(round(summary(stage4lm2)$coefficients[,1], digits = 3), round(summary(stage4lm2)$coefficients[,2], digits = 3), round(summary(stage4lm2)$coefficients[,4], digits = 3)))
+write.table(tablestage4, file = "CONDtableStage4.txt", sep = ",", quote = FALSE, row.names = F)
+```
+

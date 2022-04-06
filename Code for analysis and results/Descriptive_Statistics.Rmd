@@ -1,0 +1,91 @@
+---
+title: "Descriptive Statistics"
+author: "Katalin Roth"
+date: "30 April 2019"
+output:
+  pdf_document: 
+    highlight: zenburn
+---
+
+Loading necessary packages and data files:
+
+```{r, message=FALSE}
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(tableone)
+
+# ----------------
+
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+info2 <- readRDS(file = "info2.rds")
+```
+
+# Some plots
+
+```{r}
+# Sample
+plotinc <- ggplot(info2, aes(Incentive)) + geom_bar(fill = "royalblue3")
+plotclus <- ggplot(info2, aes(Cluster)) + geom_bar(fill = "royalblue3")
+plotstages <- ggplot(info2, aes(WhichStage)) + geom_bar(fill = "royalblue3")
+plotage <- ggplot(info2, aes(AgeCat)) + geom_bar(fill = "royalblue3")
+plotgender <- ggplot(info2, aes(Gender)) + geom_bar(fill = "royalblue3")
+plotmar <- ggplot(info2, aes(Marital_status)) + geom_bar(fill = "royalblue3")
+plotedu <- ggplot(info2, aes(Education)) + geom_bar(fill = "royalblue3")
+
+# Response
+inforesp <- info2 %>%
+  filter(Stage1 == 1)
+rplotinc <- ggplot(inforesp, aes(Incentive)) + geom_bar(fill = "salmon2")
+rplotclus <- ggplot(inforesp, aes(Cluster)) + geom_bar(fill = "salmon2")
+rplotstages <- ggplot(inforesp, aes(WhichStage)) + geom_bar(fill = "salmon2")
+rplotage <- ggplot(inforesp, aes(AgeCat)) + geom_bar(fill = "salmon2")
+rplotgender <- ggplot(inforesp, aes(Gender)) + geom_bar(fill = "salmon2")
+rplotmar <- ggplot(inforesp, aes(Marital_status)) + geom_bar(fill = "salmon2")
+rplotedu <- ggplot(inforesp, aes(Education)) + geom_bar(fill = "salmon2")
+
+ggarrange(plotinc, rplotinc, plotclus, rplotclus, plotage, rplotage, 
+          plotgender, rplotgender, plotmar, rplotmar, plotedu, rplotedu,
+          labels = c("Sample", "Response"),
+          ncol= 2)
+```
+
+
+# Sample characteristics at the different stages
+
+```{r}
+table_one <- CreateTableOne(vars = c("Cluster", "Incentive", "AgeCat", "Gender", "Marital_status", "Education", "Driverslicense", "Urbanity", "Origin", "HomeOwner", "IncomeQ"), data = info2)
+
+print(table_one, exact = "stage", quote = TRUE, noSpaces = TRUE)
+
+# Divided into the clusters
+
+table_oneClust <- CreateTableOne(vars = c("Incentive", "AgeCat", "Gender", "Marital_status", "Education", "Driverslicense", "Urbanity", "Origin", "HomeOwner", "IncomeQ"), strata = "Cluster", test = FALSE, data = info2)
+
+print(table_oneClust, exact = "stage", quote = TRUE, noSpaces = TRUE)
+
+
+# For the different stages
+
+info3 <- info2 %>%
+  filter(Stage1 == 1)
+
+table_oneS <- CreateTableOne(vars = c("Cluster", "Incentive", "AgeCat", "Gender", "Marital_status", "Education", "Driverslicense", "Urbanity", "Origin", "HomeOwner", "IncomeQ"), data = info3)
+
+print(table_oneS, exact = "stage", quote = TRUE, noSpaces = TRUE)
+
+info22 <- info2 %>%
+  filter(Stage2 == 1)
+
+table_one2 <- CreateTableOne(vars = c("Cluster", "Incentive", "AgeCat", "Gender", "Marital_status", "Education", "Driverslicense", "Urbanity", "Origin", "HomeOwner", "IncomeQ"), data = info22)
+
+print(table_one2, exact = "stage", quote = TRUE, noSpaces = TRUE)
+
+info4 <- info2 %>%
+  filter(Stage4 == 1)
+
+table_one4 <- CreateTableOne(vars = c("Cluster", "Incentive", "AgeCat", "Gender", "Marital_status", "Education", "Driverslicense", "Urbanity", "Origin", "HomeOwner", "IncomeQ"), data = info4)
+
+print(table_one4, exact = "stage", quote = TRUE, noSpaces = TRUE)
+
+```

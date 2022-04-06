@@ -1,0 +1,579 @@
+---
+title: "Stage 3 Analysis"
+author: "Katalin Roth"
+date: "3 May 2019"
+output:
+  pdf_document: 
+    highlight: zenburn
+---
+
+```{r, warning=FALSE, message=FALSE}
+# Loading necessary packages
+library(dplyr)
+library(lubridate)
+library(data.table)
+library(factoextra)
+library(purrr)
+library(cluster)
+
+
+# Loading the datafile
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+aggdata <- readRDS("dayq.RDS")
+
+# Selecting only the necessary variables
+aggdata <- select(aggdata, username.x, days, stops, stops_with_motives, tracks, transp_filled, Phone, Travel)
+
+# Fixing some variables
+aggdata$stops <- as.numeric(aggdata$stops)
+aggdata$stops_with_motives <- as.numeric(aggdata$stops_with_motives)
+aggdata$tracks <- as.numeric(aggdata$tracks)
+aggdata$transp_filled <- as.numeric(aggdata$transp_filled)
+
+```
+
+# Daily Questions Indicator
+
+```{r}
+# Putting 0, instead of missing. 
+aggdata[is.na(aggdata)] <- 0
+
+# Cutting off the days to 8
+aggdata$days[aggdata$days > 8] <- 8
+aggdata$Phone[aggdata$Phone > 8] <- 8
+aggdata$Travel[aggdata$Travel > 8] <- 8
+
+# Fixing the dailyQs
+goodset <- aggdata %>%
+  filter(days < Travel | days < Phone) %>%
+  rowwise() %>%
+  mutate(Phone = days, Travel = days)
+
+oldset <- aggdata %>%
+  filter((aggdata$username.x %in% goodset$username.x) == FALSE)
+
+aggdata <- rbind(goodset, oldset)
+
+
+# DailyQ indicator
+dailyQ_ind <- aggdata %>%
+  select(username.x, days, Phone, Travel) %>%
+  rowwise() %>%
+  mutate(missing_dayphone = days - Phone, missing_daytravel = days - Travel) %>%
+  mutate(dailyQ_ind = ((Phone + Travel) / (days+days))) %>%
+  arrange(desc(days))
+
+```
+
+# Stop indicator
+
+```{r}
+# Getting the stops for the participants
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+stops <- fread("Stops.csv")
+
+setnames(stops, "i.device_id", "device_id")
+stops$dayz <- as.Date(stops$tz_CET, format = "%Y-%m-%d")
+
+stops$first_motive[!is.na(stops$first_motive)] <- 1
+stops$first_motive[is.na(stops$first_motive)] <- 0
+stops$first_motive <- as.integer(stops$first_motive)
+
+# Selecting only the first 8 days
+total_days <- stops %>%
+  group_by(device_id) %>%
+  mutate(first = min(dayz), last = first + days(7)) %>%
+  mutate(ind = ifelse(dayz <= last, TRUE, FALSE)) %>%
+  filter(ind == TRUE)
+
+stop_ind <- total_days %>%
+  group_by(device_id) %>%
+  mutate(filled_stops = sum(first_motive)) %>%
+  mutate(total_stops = n()) %>%
+  mutate(stop_ind = filled_stops / total_stops)
+
+stop_ind <- stop_ind %>%
+  distinct(device_id, .keep_all = TRUE)
+
+
+# In case I want it per day:
+stop_day_ind <- total_days %>%
+  group_by(device_id, dayz) %>%
+  mutate(filled_stops = sum(first_motive)) %>%
+  mutate(total_stops = n()) %>%
+  mutate(stop_day_ind = filled_stops / total_stops)
+
+stop_day_ind <- stop_day_ind %>%
+  distinct(device_id, dayz, .keep_all = TRUE)
+
+stop_day_ind <- stop_day_ind %>%
+  group_by(device_id) %>%
+  mutate(daycount = row_number())
+```
+
+# Track indicator
+
+```{r}
+# Getting the tracks for the participants
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+tracks <- fread("Tracks.csv")
+
+setnames(tracks, "i.device_id", "device_id")
+setnames(tracks, "active_modes", "modes")
+tracks$dayz <- as.Date(tracks$tz_CET, format = "%Y-%m-%d")
+
+tracks$modes[!is.na(tracks$modes)] <- 1
+tracks$modes[is.na(tracks$modes)] <- 0
+tracks$modes <- as.integer(tracks$modes)
+
+# Selecting only the first 8 days
+total_days <- tracks %>%
+  group_by(device_id) %>%
+  mutate(first = min(dayz), last = first + days(7)) %>%
+  mutate(ind = ifelse(dayz <= last, TRUE, FALSE)) %>%
+  filter(ind == TRUE)
+
+track_ind <- total_days %>%
+  group_by(device_id) %>%
+  mutate(filled_modes = sum(modes)) %>%
+  mutate(total_tracks = n()) %>%
+  mutate(track_ind = filled_modes / total_tracks)
+
+track_ind <- track_ind %>%
+  distinct(device_id, .keep_all = TRUE)
+
+# In case I want it per day:
+track_day_ind <- total_days %>%
+  group_by(device_id, dayz) %>%
+  mutate(filled_tracks = sum(modes)) %>%
+  mutate(total_tracks = n()) %>%
+  mutate(track_day_ind = filled_tracks / total_tracks)
+
+track_day_ind <- track_day_ind %>%
+  distinct(device_id, dayz, .keep_all = TRUE)
+
+track_day_ind <- track_day_ind %>%
+  group_by(device_id) %>%
+  mutate(daycount = row_number())
+```
+
+# Putting these indicators into the aggregated dataset
+
+```{r}
+# Putting the dailyQ indicator into the aggregated dataset
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+aggdata <- readRDS("dayq.RDS")
+
+info_ind <- select(dailyQ_ind, username.x, dailyQ_ind)
+
+aggdata <- left_join(aggdata, info_ind, by = "username.x")
+aggdata<- left_join(aggdata, stop_ind, by = "device_id")
+aggdata <- left_join(aggdata, track_ind, by = "device_id")
+```
+
+# Time indicator
+
+This takes some time to run!
+
+```{r, warning=FALSE, message=FALSE}
+# These are the battery levels of the phones
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Input/2018-12-15")
+battery <- fread("battery_infos.csv")
+
+# Input map
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Input")
+
+# Users, where we can find their id
+user.filenames <- list.files(recursive = TRUE, pattern = "users.csv")
+user.filenames <- user.filenames[!user.filenames %like% c("2018/") ]
+user.filenames <- user.filenames[!user.filenames %like% c("1900") ]
+user.filenames <- user.filenames[!user.filenames %like% c("2018-10-04/")]
+users <- Reduce(rbind, lapply(user.filenames, fread, select = c("id", "username")))
+users <- unique(users)
+
+users$username <- as.integer(users$username)
+# removing the admin
+users <- na.omit(users)
+
+# Selecting only 4 digit users
+users <- users %>%
+  filter(username < 10000)
+
+# Input map
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Input")
+
+# Devices, because some users have more devices
+devices.filenames <- list.files(recursive = TRUE, pattern = "devices.csv")
+devices.filenames <- devices.filenames[!devices.filenames %like% c("2018/") ]
+devices.filenames <- devices.filenames[!devices.filenames %like% c("1900") ]
+devices.filenames <- devices.filenames[!devices.filenames %like% c("2018-10-04/")]
+devices <- Reduce(rbind, lapply(devices.filenames, fread, select = c("user_id", "id", "manufacturer", "model", "os", "os_version")))
+devices <- unique(devices) 
+
+# Fixing some variable names
+setnames(users, "id", "user_id")
+setnames(devices, "id", "device_id")
+
+# Joining the two datasets together
+setDT(users)
+setkey(users, user_id)
+setkey(devices, user_id)
+# We will only get the users that have a device
+tabi_info <- devices[users, on = "user_id"]
+
+
+# Getting only participants from after stage 2
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+info2 <- readRDS(file = "info2.rds")
+
+tabi_info$username <- as.numeric(tabi_info$username)
+info <- left_join(info2, tabi_info)
+
+info <- info %>%
+  filter(Stage2 == 1)
+
+battery <- battery %>%
+  filter((battery$device_id %in% info$device_id) == TRUE)
+
+battery <- left_join(battery, info)
+
+# changing times to actual times
+battery$timestamp <- ymd_hms(battery$timestamp)
+battery$hour <- floor_date(battery$timestamp, "hour")
+battery$weekdays <- weekdays(battery$hour)
+battery$hourc <- as.integer(battery$hour)
+
+
+# Get the first time point, ignoring NA's
+start <- aggregate(battery$hour, by = list(username = battery$username), min)
+setDT(start)
+start$x <- start$x -  period(1, unit = "hours")
+
+# Check which hours there are, and sort them
+total_hours <- battery %>%
+  group_by(username) %>%
+  distinct(hour) %>%
+  arrange(username)
+
+total_hours$hour <- force_tz(total_hours$hour, tzone = "UTC")
+
+# check for each device
+users <- unique(battery$username)
+check_h <- c()
+counter <- as.integer(0)
+hour_info <- setNames(data.table(matrix(nrow = 109248, ncol=3)), c("users", "which_h", "check_h"))
+hour_info[, users := as.integer(users)]
+hour_info[, which_h := as.character(which_h)]
+hour_info[, check_h := as.logical(check_h)]
+
+
+for(i in 1:length(users)){
+  # Get the first time point, ignoring NA's
+  first <- min(total_hours$hour[total_hours$username== users[i]])
+  last <- first + days(7)
+  
+  # Put them together into an interval
+  elapsed.time <- interval(first, last)
+
+  current_min <- force_tz(start$x[start$username == users[i]], tzone="UTC")  
+  
+  if((as.duration(elapsed.time) / dhours(1)) == 0){
+    set(hour_info, i = counter, j = "users", value = users[i])
+    set(hour_info, i = counter, j = "which_h", value = as.character(current_min))
+    set(hour_info, i = counter, j = "check_h", value = FALSE)
+    next    
+  }
+  
+  mins_left <- (as.duration(elapsed.time) / dhours(1)) 
+
+  for(minutes in 1:mins_left){
+    check_h[minutes] <- current_min %in% total_hours$hour[total_hours$username == users[i]]
+    counter <- as.integer(counter + 1)
+    set(hour_info, i = counter, j = "users", value = users[i])
+    set(hour_info, i = counter, j = "which_h", value = as.character(current_min))
+    set(hour_info, i = counter, j = "check_h", value = check_h[minutes])  
+    current_min <- current_min + period(1, unit = "hours")
+  }# for
+}
+
+
+hour_info$which_h2 <- as.Date(hour_info$which_h, format = "%Y-%m-%d")
+hour_info$weekdays <- weekdays(hour_info$which_h2)
+
+# Creating the time indicator
+time_indicator <- hour_info %>%
+  group_by(users) %>%
+  mutate(filledtime = sum(check_h == TRUE)) %>%
+  mutate(totaltime = 168) %>%
+  mutate(time_ind = filledtime / totaltime) %>%
+  arrange(desc(time_ind))
+
+time_indicator <- time_indicator %>%
+  group_by(users) %>%
+  filter(check_h == TRUE) %>%
+  distinct(weekdays, .keep_all = TRUE) %>%
+  mutate(ndays = n()) %>%
+  filter(ndays > 1) %>%
+  mutate(ndays = ndays / 7)
+
+time_indicator <- time_indicator %>%
+  distinct(users, .keep_all = TRUE) %>%
+  mutate(final_timeind = time_ind * ndays)
+
+
+# Connect the time indicator to the aggregated dataset
+setnames(time_indicator, "users", "username.x")
+time_indicator$username.x <- as.numeric(time_indicator$username.x)
+aggdata <- left_join(aggdata, time_indicator)
+
+```
+
+# Some descriptive plots etc
+
+```{r, warning=FALSE}
+aggdata$DailyQuestions <- aggdata$dailyQ_ind
+aggdata$TravelModes <- aggdata$track_ind
+aggdata$StopMotives <- aggdata$stop_ind
+aggdata$TimeIndicator <- aggdata$time_ind
+ti_d <- ggplot(aggdata, aes(TimeIndicator, DailyQuestions)) + 
+  geom_point() + 
+  ggtitle("A") + 
+  theme_classic() + 
+  theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, face = "bold", size = 20))
+ti_tr <- ggplot(aggdata, aes(TimeIndicator, TravelModes)) +
+  geom_point() + 
+  ggtitle("B") + 
+  theme_classic() + 
+  theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, face = "bold", size = 20))
+ti_s <- ggplot(aggdata, aes(TimeIndicator, StopMotives)) + 
+  geom_point() + 
+  ggtitle("C") + 
+  theme_classic() + 
+  theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, face = "bold", size = 20))
+tr_d <- ggplot(aggdata, aes(TravelModes, DailyQuestions)) + 
+  geom_point() + 
+  ggtitle("D") + 
+  theme_classic() + 
+  theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, face = "bold", size = 20))
+s_d <- ggplot(aggdata, aes(StopMotives, DailyQuestions)) + 
+  geom_point() + 
+  ggtitle("E") + 
+  theme_classic() + 
+  theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, face = "bold", size = 20))
+tr_s <- ggplot(aggdata, aes(TravelModes, StopMotives)) + 
+  geom_point() + 
+  ggtitle("F") + 
+  theme_classic() + 
+  theme(plot.title = element_text(hjust = 0.5, vjust = 0.5, face = "bold", size = 20))
+
+library(gridExtra)
+grid.arrange(ti_d, ti_tr, ti_s, tr_d, s_d, tr_s, ncol=3)
+```
+
+
+# Clustering
+
+```{r}
+# Setting up the data
+dat <- aggdata %>%
+  filter(days > 1) %>%
+  select(track_ind, stop_ind, dailyQ_ind, final_timeind)
+dat$track_ind[is.na(dat$track_ind)] <- 0
+dat$stop_ind[is.na(dat$stop_ind)] <- 0
+dat$dailyQ_ind[is.na(dat$dailyQ_ind)] <- 0
+dat$final_timeind[is.na(dat$final_timeind)] <- 0
+
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+saveRDS(dat, "clusterdatanoscale.RDS")
+
+dat <- scale(dat)
+summary(dat)
+
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+saveRDS(dat, "clusterdata.RDS")
+
+dat <- aggdata %>%
+  filter(days > 1)
+
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+saveRDS(dat, "aggdatcluster.RDS")
+
+
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+dat <- readRDS("clusterdata.RDS")
+
+distances <- get_dist(dat)
+fviz_dist(distances)
+
+fviz_nbclust(dat, kmeans, method = "wss")
+fviz_nbclust(dat, kmeans, method= "silhouette")
+
+k2 <- kmeans(dat, centers = 3, nstart = 25)
+str(k2)
+fviz_cluster(k2, dat)
+clust3 <- fviz_cluster(k2, dat)
+
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+dat <- readRDS("clusterdatanoscale.RDS")
+
+dat %>%
+  mutate(Clust = k2$cluster) %>%
+  group_by(Clust) %>%
+  summarise_all("mean")
+
+# Scaled
+
+dat <- as.data.frame(scale(dat))
+
+dat %>%
+  mutate(Clust = k2$cluster) %>%
+  group_by(Clust) %>%
+  summarise_all("mean")
+
+
+
+# Predicting the clusters
+
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Werk/Tabi Verplaatsingen App/Data/Katie/Thesis/Documents")
+aggdat <- readRDS("clustdata.rds")
+
+aggdata <- aggdat %>%
+  mutate(Clust = k2$cluster)
+
+aggdata$Clust <- as.factor(aggdata$Clust)
+aggdata$Clust <- relevel(aggdata$Clust, ref = 3) 
+
+# Fixing device type
+aggdata$type <- "Other"
+aggdata$type[aggdata$manufacturer.y == "Apple"] <- "Apple"
+aggdata$type[aggdata$manufacturer.y == "samsung"] <- "samsung"
+aggdata$type <- as.factor(aggdata$type)
+
+
+# Multinomial logistic regression
+library(nnet)
+model <- multinom(Clust ~ Cluster + Incentive + AgeCat + Gender + Driverslicense + 
+                  Education + Marital_status + Origin + Urbanity  + HomeOwner + IncomeQ + type, data = aggdata)
+
+summary(model)
+zvalues <- summary(model)$coefficients / summary(model)$standard.errors
+p <- (1 - pnorm(abs(zvalues), 0, 1)) * 2
+p
+
+as.data.frame(rbind(summary(model)$coefficients, summary(model)$standard.errors, p))
+
+
+# Multinomial logistic regression - significant only
+library(nnet)
+model <- multinom(Clust ~ AgeCat + type, data = aggdata)
+
+summary(model)
+zvalues <- summary(model)$coefficients / summary(model)$standard.errors
+p <- (1 - pnorm(abs(zvalues), 0, 1)) * 2
+p
+
+as.data.frame(rbind(summary(model)$coefficients, summary(model)$standard.errors, p))
+
+# Saving the results
+tablestage3 <- as.data.frame(rbind(round(summary(model)$coefficients, digits = 3), round(summary(model)$standard.errors, digits = 3), round(p, digits = 3)))
+write.table(tablestage3, file = "tableStage3.txt", sep = ",", quote = FALSE, row.names = F)
+
+ 
+```
+
+
+# Creating average indicators per day
+
+```{r}
+# Daily questions
+# Input map
+setwd("//cbsp.nl/Productie/Projecten/BPM/301707WaarnVnw_SEC1/Input")
+
+# Loading all the days 
+dayq.filenames <- list.files(recursive = TRUE, pattern = "questions_answers.csv")
+dayq.filenames <- dayq.filenames[!dayq.filenames %like% c("2018/") ]
+dayq.filenames <- dayq.filenames[!dayq.filenames %like% c("2019") ]
+dayq.filenames <- dayq.filenames[!dayq.filenames %like% c("1900") ]
+dayq <- Reduce(rbind, lapply(dayq.filenames, fread, select = c("id", "device_id", "identifier", "question_date", "answer")))
+dayq <- unique(dayq)
+
+# link to user_id
+devices <- read.csv("\\\\cbsp.nl\\Productie\\Projecten\\BPM\\301707WaarnVnw_SEC1\\Input\\2018-12-15\\devices.csv")
+devicesid <- select(devices, c("id","user_id"))
+colnames(devicesid) <- c("device_id","user_id")
+dayq <- left_join(dayq, devicesid)
+dayq <- select(dayq, c("question_date","answer","user_id","identifier", "device_id"))
+
+dayq <- unique(dayq)
+
+dayq$answer[dayq$answer != ""] <- 1
+dayq$answer[is.na(dayq$answer)] <- 0
+dayq$answer <- as.integer(dayq$answer)
+dayq$answer[is.na(dayq$answer)] <- 0
+
+dayq$identifier[dayq$identifier == "DAY-NOTES"] <- "Notes"
+dayq$identifier[dayq$identifier == "DAY-TRAVEL"] <- "Travel"
+dayq$identifier[dayq$identifier == "DAY-PHONE"] <- "Phone"
+
+
+dayq$identifier <- as.factor(dayq$identifier)
+dayq$user_id <- as.integer(dayq$user_id)
+
+dayq <- dayq %>% 
+  filter(identifier != "Notes")
+
+dayq <- unique(dayq)
+dayq$question_date <- substr(dayq$question_date, start=1, stop=10)
+dayq <- distinct(dayq, question_date, user_id, device_id, identifier, .keep_all = TRUE)
+
+#detach("package:plyr", unload = TRUE)
+# How many questions are answered per day
+daily_day_ind <- dayq %>%
+  group_by(device_id, question_date) %>%
+  mutate(filled_qs = sum(answer)) %>%
+  mutate(total_qs = dplyr::n()) %>%
+  mutate(daily_day_ind = filled_qs / total_qs)
+
+daily_day_ind <- daily_day_ind %>%
+  distinct(device_id, question_date, .keep_all = TRUE)
+
+daily_day_ind <- daily_day_ind %>%
+  group_by(device_id) %>%
+  mutate(daycount = row_number())
+
+mean_daily_days <- daily_day_ind %>%
+  group_by(daycount) %>%
+  summarise(mean = mean(daily_day_ind))
+
+ggplot(mean_daily_days, aes(daycount, mean)) + geom_line()
+
+mean_daily_days <- mean_daily_days %>%
+  filter(daycount <= 8)
+
+ggplot(mean_daily_days, aes(daycount, mean)) + geom_line()
+
+# Stops and tracks
+mean_stop_days <- stop_day_ind %>%
+  group_by(daycount) %>%
+  summarise(mean = mean(stop_day_ind))
+
+ggplot(mean_stop_days, aes(daycount, mean)) + geom_line()
+
+mean_track_days <- track_day_ind %>%
+  group_by(daycount) %>%
+  summarise(mean = mean(track_day_ind))
+
+ggplot(mean_track_days, aes(daycount, mean)) + geom_line()
+
+dayinds <- cbind(mean_stop_days, mean_track_days, mean_daily_days)
+colnames(dayinds) <- c("days", "Mean_stop", "days2", "Mean_track", "days3", "Mean_DailyQ")
+
+dayinds <- dayinds %>%
+  select(-c(days2, days3))
+dayinds
+
+
+library(xtable)
+xtable(dayinds)
+```
+
